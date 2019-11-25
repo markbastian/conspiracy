@@ -10,6 +10,9 @@
    9  {:secret-vote-sizes [3 4 4 5 5] :overthrow-votes [1 1 1 2 1] :evil 3}
    10 {:secret-vote-sizes [3 4 4 5 5] :overthrow-votes [1 1 1 2 1] :evil 4}})
 
+(def good-roles #{:spy :spymaster})
+(def evil-roles #{:traitor :assassin})
+
 (def good-role-seq (cons :spymaster (repeat :spy)))
 (def evil-role-seq (cons :assassin (repeat :traitor)))
 
@@ -21,7 +24,7 @@
       (= 3 pass) :good-wins
       (< (count nominees) num-nominees) :nomination
       (not-every? :vote players) :public-vote
-      (< (count (map :secret-vote players)) num-nominees) :private-vote)))
+      (< (count (filter :secret-vote players)) num-nominees) :private-vote)))
 
 (defn init-game [players]
   (let [{:keys [evil]} (player-mats (count players))
@@ -71,7 +74,6 @@
       reset-government))
 
 (defn pass-mission [game-state]
-  (print "The mission passed")
   (resolve-mission game-state :pass))
 
 (defn fail-mission [game-state]
@@ -93,7 +95,7 @@
     (let [{:keys [pass fail]} (frequencies (map :vote players))]
       (cond
         (> pass fail) (pass-vote game-state)
-        (= max-votes (count vote-track)) (fail-mission game-state)
+        (>= (count vote-track) max-votes) (fail-mission game-state)
         :else (fail-vote game-state)))
     game-state))
 

@@ -13,11 +13,11 @@
 
 (def players
   [{:name "Mark"}
-   {:name "Bob"}
    {:name "Becky"}
-   {:name "Sue"}
-   {:name "Sam"}
-   {:name "Jill"}])
+   {:name "Chloe"}
+   {:name "Gregor"}
+   {:name "Luxa"}
+   {:name "Boots"}])
 
 (defonce state (r/atom {:player-index 0
                         :game-state   (rules/init-game players)}))
@@ -25,10 +25,16 @@
 
 (defn log [m] (.log js/console m))
 
-;(defn render-instructions [state]
-;  (let [nominees (r/cursor state [:game-state :nominees])
-;        nominees (r/cursor state [:game-state :results])]
-;    ()))
+(defn render-results-track [state]
+  (let [results (r/cursor state [:game-state :results])]
+    (fn [state]
+      [:span.text-center
+       (doall
+         (for [[i result :as k] (map vector (range) @results)]
+           ^{:key k}
+           (if (= result :pass)
+             [:span.far.fa-thumbs-up.fa-2x.text-success 1]
+             [:span.far.fa-thumbs-down.fa-2x.text-danger 1])))])))
 
 (defn render-players [state]
   (let [players (r/cursor state [:game-state :players])
@@ -37,54 +43,59 @@
         nominees (r/cursor state [:game-state :nominees])
         player-index (get-in @state [:player-index])
         this-player (@players player-index)]
-    (fn []
-      [:div
-       (doall
-         (for [[{player-name :name :keys [vote] :as player} i] (map vector @players (range))]
-           ^{:key player}
-           [:span
-            (when (rules/public-vote? @game-state)
-              [:span.float-left.far.fa-thumbs-up.text-success
-               {:onClick #(swap! game-state rules/cast-public-vote i :pass)}])
-            [:button.btn.btn-lg.btn-block
-             {:style   (cond-> {:border-radius :1.5rem
-                                :border-color  "#CCCCCC"}
-                               (@nominees i)
-                               (assoc :background-color "#E0E0E0"))
-              :onClick (fn [_]
-                         (swap! game-state rules/nominate @active-player i)
-                         #_
-                         (swap! game-state rules/nominate player-index i))}
-             (when (= @active-player i)
-               [:span.fas.fa-crown.text-warning])
-             player-name]
-            (when (rules/public-vote? @game-state)
-              [:span.float-right.far.fa-thumbs-down.text-danger
-               {:onClick #(swap! game-state rules/cast-public-vote i :fail)}])]))
-       [:br]
-       [:div.text-center
-        [:button.btn.btn-lg
-         {:style   {:border-radius    :1.5rem
-                    :background-color "#66FF00"}
-          :onClick (fn [_]
-                     (print "click")
-                     (swap! game-state rules/cast-public-vote player-index :pass))}
-         [:span.far.fa-thumbs-up.fa-2x]]
-        [:button.btn.btn-lg
-         {:style   {:border-radius    :1.5rem
-                    :background-color "#FF0000"}
-          :onClick (fn [_]
-                     (print "click")
-                     (swap! game-state rules/cast-public-vote player-index :fail))}
-         [:span.far.fa-thumbs-down.fa-2x]]]
-       [:div (cs/join "," (map :vote @players))]
-       [:span.text-center
-        [:span.far.fa-thumbs-down.text-danger 1]
-        [:span.far.fa-thumbs-down.text-danger 1]
-        [:span.far.fa-thumbs-down.text-danger 1]
-        [:span.far.fa-thumbs-down.text-danger 1]
-        [:span.far.fa-thumbs-down.text-danger 1]]
-       [:p (with-out-str (pp/pprint @game-state))]])))
+    (fn [state]
+      (let [stage (rules/stage @game-state)]
+        [:div
+         (doall
+           (for [[{player-name :name :keys [role vote] :as player} i] (map vector @players (range))]
+             ^{:key player}
+             [:button.btn.btn-lg.btn-block
+              (cond->
+                {:style (cond-> {                           ;:font-family "Times New Roman"
+                                 :border-radius :1.5rem
+                                 :border-color  "#CCCCCC"}
+                                (@nominees i)
+                                (assoc :background-color "#E0E0E0"))}
+                (= :nomination stage)
+                (assoc :onClick (fn [_]
+                                  (swap! game-state rules/nominate @active-player i)
+                                  #_(swap! game-state rules/nominate player-index i))))
+              (when (= @active-player i)
+                [:span.fas.fa-crown.text-warning])
+              (when (= stage :good-wins) (and (rules/good-roles role))
+                [:span.float-left.fas.fa-medal.text-success])
+              (when (= stage :public-vote)
+                [:span.float-left.far.fa-thumbs-up.text-success
+                 {:onClick #(swap! game-state rules/cast-public-vote i :pass)}])
+              (when (and (= stage :private-vote) (@nominees i))
+                [:span.float-left.far.fa-thumbs-up.text-success
+                 {:onClick #(swap! game-state rules/cast-secret-vote i :pass)}])
+              player-name
+              (when (= stage :public-vote)
+                [:span.float-right.far.fa-thumbs-down.text-danger
+                 {:onClick #(swap! game-state rules/cast-public-vote i :fail)}])
+              (when (and (= stage :private-vote) (@nominees i))
+                [:span.float-right.far.fa-thumbs-down.text-danger
+                 {:onClick #(swap! game-state rules/cast-secret-vote i :fail)}])]))
+         [:br]
+         [:div.text-center
+          [:button.btn.btn-lg
+           {:style   {:border-radius    :1.5rem
+                      :background-color "#66FF00"}
+            :onClick (fn [_]
+                       (print "click")
+                       (swap! game-state rules/cast-public-vote player-index :pass))}
+           [:span.far.fa-thumbs-up.fa-2x]]
+          [:button.btn.btn-lg
+           {:style   {:border-radius    :1.5rem
+                      :background-color "#FF0000"}
+            :onClick (fn [_]
+                       (print "click")
+                       (swap! game-state rules/cast-public-vote player-index :fail))}
+           [:span.far.fa-thumbs-down.fa-2x]]]
+         [render-results-track state]
+         [:p (with-out-str (pp/pprint @game-state))]
+         [:p stage]]))))
 
 (defn render-role [state]
   (let [player-index (get-in @state [:player-index])
