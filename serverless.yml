@@ -4,7 +4,7 @@ provider:
   name: aws
 
 custom:
-  siteName: autoexsec.com
+  siteName: conspiracy.com
   aliasHostedZoneId: Z3AQBSTGFYJSTF    # us-east-1
   aliasDNSName: s3-website-us-east-1.amazonaws.com
   s3Sync:
