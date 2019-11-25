@@ -1,0 +1,48 @@
+# https://www.serverlessops.io/blog/static-websites-on-aws-s3-with-serverless-framework
+Resources:
+  StaticSite:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: PublicRead
+      BucketName: ${self:custom.siteName}
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+
+  StaticSiteS3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: StaticSite
+      PolicyDocument:
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: "*"
+            Action:
+            - s3:GetObject
+            Resource:
+              Fn::Join: [
+                "", [
+                  "arn:aws:s3:::",
+                  {
+                    "Ref": "StaticSite"
+                  },
+                  "/*"
+                ]
+              ]
+
+Outputs:
+  StaticSiteS3BucketName:
+    Value:
+      'Ref': StaticSite
+  StaticSiteS3BucketDomainName:
+    Value:
+      Fn::GetAtt:
+        - StaticSite
+        - DomainName
+  StaticSiteS3BucketWebsiteURL:
+    Value:
+      Fn::GetAtt:
+        - StaticSite
+        - WebsiteURL

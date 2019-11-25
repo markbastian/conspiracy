@@ -1,0 +1,22 @@
+service: conspiracy
+
+provider:
+  name: aws
+
+custom:
+  siteName: autoexsec.com
+  aliasHostedZoneId: Z3AQBSTGFYJSTF    # us-east-1
+  aliasDNSName: s3-website-us-east-1.amazonaws.com
+  s3Sync:
+    - bucketName: ${self:custom.siteName}
+      localDir: public
+  scriptHooks:
+    before:package:createDeploymentArtifacts: shadow-cljs release app
+
+resources:
+  - ${file(resources/static-website.yml)}
+
+# sls plugin install -n serverless-s3-sync
+plugins:
+  - serverless-s3-sync
+  - serverless-scriptable-plugin
