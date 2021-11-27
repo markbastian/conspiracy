@@ -31,15 +31,15 @@
                         :source-paths ["src/main/cljs" "src/main/cljc"]
                         :compiler {:main conspiracy.app
                                    :asset-path "js/compiled/out"
-                                   :output-to "resources/public/js/compiled/conspiracy.js"
-                                   :output-dir "resources/public/js/compiled/out"
+                                   :output-to "src/main/resources/public/js/compiled/conspiracy.js"
+                                   :output-dir "src/main/resources/public/js/compiled/out"
                                    :source-map-timestamp true}}
                        ;; This next build is an compressed minified build for
                        ;; production. You can build this with:
                        ;; lein cljsbuild once min
                        {:id "min"
                         :source-paths ["src/main/cljs" "src/main/cljc"]
-                        :compiler {:output-to "resources/public/js/compiled/conspiracy.js"
+                        :compiler {:output-to "src/main/resources/public/js/compiled/conspiracy.js"
                                    :main conspiracy.app
                                    :optimizations :advanced
                                    :pretty-print false}}]}

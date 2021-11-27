@@ -1,17 +1,14 @@
 ;(shadow.cljs.devtools.api/nrepl-select :app)
 (ns conspiracy.app
   (:require-macros [cljs.core.async.macros :refer [go go-loop]])
-  (:require [reagent.core :as r]
-            [reagent.dom :as dom]
+  (:require [reagent.dom :as dom]
             [ajax.core :refer [GET POST]]
-            [clojure.string :as cs]
             [conspiracy.rules :as rules]
             [clojure.walk :refer [keywordize-keys]]
             [cljs.core.async :as a :refer [<! >!]]
-            [clojure.pprint :as pp]
-            [conspiracy.api :as api]
-            [re-frame.db :as db]
-            [re-frame.core :as rf]))
+            [re-frame.core :as rf]
+            [conspiracy.events :as events]
+            [conspiracy.subs :as subs]))
 
 (def players
   [{:name "Mark"}
@@ -21,102 +18,52 @@
    {:name "Luxa"}
    {:name "Boots"}])
 
-(rf/reg-event-db
-  ::initialize
-  (fn [_ _]
-    {:player-index 0
-     :game-state   (rules/init-game players)}))
-
-(rf/reg-event-db
-  ::nominate
-  (fn [db [_ active-player-index nominated-player-index]]
-    (doto
-      (update db :game-state rules/nominate active-player-index nominated-player-index)
-      pp/pprint)))
-
-(rf/reg-event-db
-  ::cast-public-vote
-  (fn [db [_ player-index pass-or-fail]]
-    (doto
-      (update db :game-state rules/cast-public-vote player-index pass-or-fail)
-      pp/pprint)))
-
-(rf/reg-event-db
-  ::cast-secret-vote
-  (fn [db [_ player-index pass-or-fail]]
-    (doto
-      (update db :game-state rules/cast-secret-vote player-index pass-or-fail)
-      pp/pprint)))
-
-(rf/reg-event-db
-  ::assassinate
-  (fn [db [_ player-index nominee-index]]
-    (doto
-      (update db :game-state rules/assassinate player-index nominee-index))
-    pp/pprint))
-
-(rf/reg-event-db
-  ::set-state
-  (fn [_db [_ state]]
-    state))
-
 (comment
   (rf/dispatch
-    [::set-state
+    [::events/set-state
      {:player-index 0
       :game-state
-      {:players
-       [{:name "Mark" :role :assassin}
-        {:name "Becky" :role :spy}
-        {:name "Chloe" :role :traitor}
-        {:name "Gregor" :role :spymaster}
-        {:name "Luxa" :role :spy}
-        {:name "Boots" :role :spy}]
-       :current-player-index 3
-       :nominees #{}
-       :vote-track []
-       :results
-       [{:pass 2 :result :pass}
-        {:pass 3 :result :pass}
-        {:pass 4 :result :pass}]}}])
+                    {:players
+                                           [{:name "Mark" :role :assassin}
+                                            {:name "Becky" :role :spy}
+                                            {:name "Chloe" :role :traitor}
+                                            {:name "Gregor" :role :spymaster}
+                                            {:name "Luxa" :role :spy}
+                                            {:name "Boots" :role :spy}]
+                     :current-player-index 3
+                     :nominees             #{}
+                     :vote-track           []
+                     :results
+                                           [{:pass 2 :result :pass}
+                                            {:pass 3 :result :pass}
+                                            {:pass 4 :result :pass}]}}])
+
+  (rf/dispatch
+    [::events/set-state
+     {:player-index 0,
+      :game-state
+                    {:players
+                                           [{:name "Mark", :role :traitor}
+                                            {:name "Becky", :role :spy}
+                                            {:name "Chloe", :role :spy}
+                                            {:name "Gregor", :role :spymaster}
+                                            {:name "Luxa", :role :spy}
+                                            {:name "Boots", :role :assassin}],
+                     :current-player-index 5,
+                     :nominees             #{},
+                     :vote-track           [],
+                     :results
+                                           [{:pass 1, :fail 1, :result :fail}
+                                            {:pass 3, :result :pass}
+                                            {:pass 4, :result :pass}
+                                            {:pass 3, :result :pass}]}}])
+
   )
 
 (defn log [m] (.log js/console m))
 
-(rf/reg-sub
-  ::player-index
-  (fn [{:keys [player-index]} _] player-index))
-
-(rf/reg-sub
-  ::game-state
-  (fn [db _] (-> db :game-state)))
-
-(rf/reg-sub
-  ::players
-  (fn [db _] (-> db :game-state :players)))
-
-(rf/reg-sub
-  ::nominees
-  (fn [db _] (-> db :game-state :nominees)))
-
-(rf/reg-sub
-  ::assassin-index
-  (fn [db _] (-> db :game-state rules/assassin-index)))
-
-(rf/reg-sub
-  ::stage
-  (fn [db _] (-> db :game-state rules/stage)))
-
-(rf/reg-sub
-  ::current-player-index
-  (fn [db _] (-> db :game-state :current-player-index)))
-
-(rf/reg-sub
-  ::game-results
-  (fn [db _] (-> db :game-state :results)))
-
 (defn render-results-track []
-  (let [results (rf/subscribe [::game-results])]
+  (let [results (rf/subscribe [::subs/game-results])]
     [:span.text-center
      (doall
        (for [[i {:keys [pass fail result] :as r} :as k] (map vector (range) @results)]
@@ -129,10 +76,10 @@
                     [:span.far.fa-thumbs-down (or fail 0)]]))]))
 
 (defn render-nominations []
-  (let [player-index (rf/subscribe [::player-index])
-        current-player-index (rf/subscribe [::current-player-index])
-        stage (rf/subscribe [::stage])
-        game-state (rf/subscribe [::game-state])]
+  (let [player-index (rf/subscribe [::subs/player-index])
+        current-player-index (rf/subscribe [::subs/current-player-index])
+        stage (rf/subscribe [::subs/stage])
+        game-state (rf/subscribe [::subs/game-state])]
     (when (= @stage :nomination)
       (let [message (if (= player-index current-player-index)
                       (str "Select "
@@ -146,9 +93,9 @@
         [:h4.text-center message]))))
 
 (defn render-public-vote []
-  (let [game-state (rf/subscribe [::game-state])
-        player-index (rf/subscribe [::player-index])
-        stage (rf/subscribe [::stage])]
+  (let [game-state (rf/subscribe [::subs/game-state])
+        player-index (rf/subscribe [::subs/player-index])
+        stage (rf/subscribe [::subs/stage])]
     (when (= @stage :public-vote)
       (if (get-in @game-state [:players player-index :vote])
         [:h4.text-center "Your vote has been recorded"]
@@ -157,17 +104,17 @@
          [:div.text-center
           [:button.btn.btn-success
            {:style   {:border-radius :1.5rem}
-            :onClick #(rf/dispatch [::cast-public-vote player-index :pass])}
+            :onClick #(rf/dispatch [::events/cast-public-vote player-index :pass])}
            [:span.far.fa-thumbs-up.fa-2x]]
           [:button.btn.btn-danger
            {:style   {:border-radius :1.5rem}
-            :onClick #(rf/dispatch [::cast-public-vote player-index :fail])}
+            :onClick #(rf/dispatch [::events/cast-public-vote player-index :fail])}
            [:span.far.fa-thumbs-down.fa-2x]]]]))))
 
 (defn render-private-vote []
-  (let [game-state (rf/subscribe [::game-state])
-        player-index (rf/subscribe [::player-index])
-        stage (rf/subscribe [::stage])]
+  (let [game-state (rf/subscribe [::subs/game-state])
+        player-index (rf/subscribe [::subs/player-index])
+        stage (rf/subscribe [::subs/stage])]
     (when (= @stage :private-vote)
       (cond
         (get-in @game-state [:players player-index :secret-vote])
@@ -180,24 +127,24 @@
          [:div.text-center
           [:button.btn.btn-success
            {:style   {:border-radius :1.5rem}
-            :onClick #(rf/dispatch [::cast-secret-vote player-index :pass])}
+            :onClick #(rf/dispatch [::events/cast-secret-vote player-index :pass])}
            [:span.far.fa-thumbs-up.fa-2x]]
           [:button.btn.btn-danger
            {:style   {:border-radius :1.5rem}
-            :onClick #(rf/dispatch [::cast-secret-vote player-index :fail])}
+            :onClick #(rf/dispatch [::events/cast-secret-vote player-index :fail])}
            [:span.far.fa-thumbs-down.fa-2x]]]]))))
 
 (defn render-assassin-instructions []
-  (let [players (rf/subscribe [::players])
-        player-index (rf/subscribe [::player-index])
-        stage (rf/subscribe [::stage])]
+  (let [players (rf/subscribe [::subs/players])
+        player-index (rf/subscribe [::subs/player-index])
+        stage (rf/subscribe [::subs/stage])]
     (when (= @stage :assassin-guess)
       (if (= :assassin (get-in players [player-index :role]))
         [:h4.text-center "Select a player to assassinate"]
         [:h4.text-center "Waiting for the assassin"]))))
 
 (defn render-active-player [player-index]
-  (let [active-player (rf/subscribe [::current-player-index])]
+  (let [active-player (rf/subscribe [::subs/current-player-index])]
     (when (= @active-player player-index) [:span.fas.fa-crown.text-warning])))
 
 (def player-button-style
@@ -206,10 +153,10 @@
    :border-color  "#CCCCCC"})
 
 (defn render-player-nominations []
-  (let [players (rf/subscribe [::players])
-        nominees (rf/subscribe [::nominees])
-        active-player (rf/subscribe [::current-player-index])
-        stage (rf/subscribe [::stage])]
+  (let [players (rf/subscribe [::subs/players])
+        nominees (rf/subscribe [::subs/nominees])
+        active-player (rf/subscribe [::subs/current-player-index])
+        stage (rf/subscribe [::subs/stage])]
     (when (= :nomination @stage)
       [:div
        (doall
@@ -220,14 +167,14 @@
             {:style   (cond-> player-button-style
                               (@nominees i)
                               (assoc :background-color "#E0E0E0"))
-             :onClick #(rf/dispatch [::nominate @active-player i])}
+             :onClick #(rf/dispatch [::events/nominate @active-player i])}
             [render-active-player i]
             player-name]))])))
 
 (defn render-players-public-vote []
-  (let [players (rf/subscribe [::players])
-        nominees (rf/subscribe [::nominees])
-        stage (rf/subscribe [::stage])]
+  (let [players (rf/subscribe [::subs/players])
+        nominees (rf/subscribe [::subs/nominees])
+        stage (rf/subscribe [::subs/stage])]
     (when (= :public-vote @stage)
       [:div
        (doall
@@ -238,16 +185,16 @@
                             (get @nominees i)
                             (assoc :background-color "#E0E0E0"))}
             [:span.float-left.far.fa-thumbs-up.text-success
-             {:onClick #(rf/dispatch [::cast-public-vote i :pass])}]
+             {:onClick #(rf/dispatch [::events/cast-public-vote i :pass])}]
             [render-active-player i]
             player-name
             [:span.float-right.far.fa-thumbs-down.text-danger
-             {:onClick #(rf/dispatch [::cast-public-vote i :fail])}]]))])))
+             {:onClick #(rf/dispatch [::events/cast-public-vote i :fail])}]]))])))
 
 (defn render-players-secret-vote []
-  (let [players (rf/subscribe [::players])
-        nominees (rf/subscribe [::nominees])
-        stage (rf/subscribe [::stage])]
+  (let [players (rf/subscribe [::subs/players])
+        nominees (rf/subscribe [::subs/nominees])
+        stage (rf/subscribe [::subs/stage])]
     (when (= :private-vote @stage)
       [:div
        (doall
@@ -259,19 +206,19 @@
                             (assoc :background-color "#E0E0E0"))}
             (when (@nominees i)
               [:span.float-left.far.fa-thumbs-up.text-success
-               {:onClick #(rf/dispatch [::cast-secret-vote i :pass])}])
+               {:onClick #(rf/dispatch [::events/cast-secret-vote i :pass])}])
             [render-active-player i]
             player-name
             (when (@nominees i)
               [:span.float-right.far.fa-thumbs-down.text-danger
-               {:onClick #(rf/dispatch [::cast-secret-vote i :fail])}])]))])))
+               {:onClick #(rf/dispatch [::events/cast-secret-vote i :fail])}])]))])))
 
 
 (defn render-players-assassin []
-  (let [players (rf/subscribe [::players])
-        nominees (rf/subscribe [::nominees])
-        assassin-index (rf/subscribe [::assassin-index])
-        stage (rf/subscribe [::stage])]
+  (let [players (rf/subscribe [::subs/players])
+        nominees (rf/subscribe [::subs/nominees])
+        assassin-index (rf/subscribe [::subs/assassin-index])
+        stage (rf/subscribe [::subs/stage])]
     (when (and (= :assassin-guess @stage)
                ;(= player-index (rules/assassin-index @game-state))
                )
@@ -284,13 +231,13 @@
             {:style   (cond-> player-button-style
                               (@nominees i)
                               (assoc :background-color "#E0E0E0"))
-             :onClick #(rf/dispatch [::assassinate @assassin-index i])}
+             :onClick #(rf/dispatch [::events/assassinate @assassin-index i])}
             player-name]))])))
 
 (defn render-players-endgame []
-  (let [players (rf/subscribe [::players])
-        nominees (rf/subscribe [::nominees])
-        stage (rf/subscribe [::stage])]
+  (let [players (rf/subscribe [::subs/players])
+        nominees (rf/subscribe [::subs/nominees])
+        stage (rf/subscribe [::subs/stage])]
     (when (#{:evil-wins :good-wins} @stage)
       [:div
        (doall
@@ -302,15 +249,15 @@
                             (assoc :background-color "#E0E0E0"))}
             (when (@nominees i)
               [:span.float-left.far.fa-thumbs-up.text-success
-               {:onClick #(rf/dispatch [::cast-secret-vote i :pass])}])
+               {:onClick #(rf/dispatch [::events/cast-secret-vote i :pass])}])
             [render-active-player i]
             (str player-name ":" (name role))
             (when (@nominees i)
               [:span.float-right.far.fa-thumbs-down.text-danger
-               {:onClick #(rf/dispatch [::cast-secret-vote i :fail])}])]))])))
+               {:onClick #(rf/dispatch [::events/cast-secret-vote i :fail])}])]))])))
 
 (defn render-players []
-  (let [stage (rf/subscribe [::stage])]
+  (let [stage (rf/subscribe [::subs/stage])]
     [:div
      [render-player-nominations]
      [render-players-public-vote]
@@ -323,14 +270,13 @@
      [render-private-vote]
      [render-assassin-instructions]
      [render-results-track]
-     [:h2 @stage]
-     ]))
+     [:h2 @stage]]))
 
 (defn render-role []
-  (let [player-index (rf/subscribe [::player-index])
-        players (rf/subscribe [::players])]
+  (let [player-index (rf/subscribe [::subs/player-index])
+        players (rf/subscribe [::subs/players])]
     (let [{:keys [role]} (get @players @player-index)]
-      [:h1.text-center (name role)])))
+      [:h1.text-center (some-> role name)])))
 
 (defn chatroom []
   [:div
@@ -388,11 +334,11 @@
     [:div#role.tab-pane.fade [render-role]]]])
 
 (defn ^:dev/after-load ui-root []
-  (rf/dispatch [::initialize])
+  (rf/dispatch [::events/initialize {:players players}])
   (dom/render [render] (.getElementById js/document "ui-root")))
 
 (defn init []
-  (rf/dispatch [::initialize])
+  (rf/dispatch [::events/initialize {:players players}])
   (let [root (.getElementById js/document "ui-root")]
     (.log js/console root)
     (dom/render [render] root)))

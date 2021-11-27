@@ -16,3 +16,4 @@ scratch.clj
 /.shadow-cljs
 /node_modules
 /.serverless
+src/main/resources/public/
