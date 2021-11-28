@@ -12,8 +12,8 @@
  :nrepl        {:port 7888}
 
  :builds       {:app {:target     :browser
-                      :output-dir "src/main/resources/public"
-                      :asset-path "."
+                      :output-dir "src/main/resources/public/assets/app/js"
+                      :asset-path "/assets/app/js"
                       :modules    {:main {:init-fn conspiracy.app/init}}
                       :devtools   {:http-root "public"
                                    :http-port 8080}}}}

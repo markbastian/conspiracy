@@ -57,7 +57,7 @@
       [:script {:src "https://maxcdn.bootstrapcdn.com/bootstrap/4.2.1/js/bootstrap.min.js" :crossorigin "anonymous"}]]
      [:body
       [:div#ui-root]
-      [:script {:src "main.js"}]]]))
+      [:script {:src "/assets/app/js/main.js"}]]]))
 
 (def websocket-routes
   [["/ws" ws-handler]
